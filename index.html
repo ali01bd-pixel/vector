@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Flat-color raster image to SVG and EPS vectorizer for silhouette and simple artwork.">
+  <title>FlatColor Vectorizer</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand-wrap">
+      <div class="brand-mark">FV</div>
+      <div>
+        <h1>FlatColor Vectorizer</h1>
+        <p>Raster → clean flat-color SVG / EPS</p>
+      </div>
+    </div>
+    <a class="github-link" href="https://pages.github.com/" target="_blank" rel="noreferrer">GitHub Pages ready</a>
+  </header>
+
+  <main class="app-shell">
+    <section class="card upload-card" id="uploadCard">
+      <input id="fileInput" type="file" accept="image/png,image/jpeg,image/jpg,image/webp" hidden>
+      <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Upload an image">
+        <div class="upload-icon">↑</div>
+        <h2>Drop an image here</h2>
+        <p>PNG, JPG or WebP. Flat-color artwork and silhouettes work best.</p>
+        <button class="primary" id="browseBtn" type="button">Choose Image</button>
+      </div>
+    </section>
+
+    <section class="workspace hidden" id="workspace">
+      <aside class="card controls">
+        <div class="section-title">
+          <div>
+            <span class="eyebrow">1 · Prepare</span>
+            <h2>Vector settings</h2>
+          </div>
+          <button class="ghost small" id="newImageBtn" type="button">New image</button>
+        </div>
+
+        <div class="control-block">
+          <label for="colorCount">Number of colors</label>
+          <select id="colorCount">
+            <option value="2" selected>2 colors</option>
+            <option value="3">3 colors</option>
+            <option value="4">4 colors</option>
+            <option value="5">5 colors</option>
+            <option value="6">6 colors</option>
+            <option value="8">8 colors</option>
+          </select>
+          <p class="hint">The image is reduced to this many flat fills before tracing.</p>
+        </div>
+
+        <div class="control-block">
+          <div class="label-row">
+            <label>Palette</label>
+            <button class="link-btn" id="autoPaletteBtn" type="button">Auto-detect</button>
+          </div>
+          <div id="paletteList" class="palette-list"></div>
+          <div class="palette-mode-row">
+            <button class="mode active" data-mode="manual" type="button">Use selected colors</button>
+            <button class="mode" data-mode="auto" type="button">Use auto palette</button>
+          </div>
+          <p class="hint">Use the eyedropper beside a swatch to pick an exact color from the image.</p>
+        </div>
+
+        <div class="control-block">
+          <div class="label-row">
+            <label for="smoothing">Edge smoothing</label>
+            <output id="smoothingValue">2</output>
+          </div>
+          <input id="smoothing" type="range" min="0" max="5" value="2" step="1">
+          <div class="range-labels"><span>Sharper</span><span>Smoother</span></div>
+        </div>
+
+        <div class="control-block">
+          <div class="label-row">
+            <label for="noise">Remove tiny details</label>
+            <output id="noiseValue">4 px</output>
+          </div>
+          <input id="noise" type="range" min="0" max="30" value="4" step="1">
+          <div class="range-labels"><span>Keep detail</span><span>Remove noise</span></div>
+        </div>
+
+        <div class="check-row">
+          <input id="preserveWhite" type="checkbox" checked>
+          <label for="preserveWhite"><strong>Preserve white</strong><span>Keep white as a real vector fill.</span></label>
+        </div>
+        <div class="check-row">
+          <input id="fitCanvas" type="checkbox" checked>
+          <label for="fitCanvas"><strong>Fit artwork to original size</strong><span>Keep the source pixel dimensions in the output.</span></label>
+        </div>
+
+        <button class="primary wide" id="vectorizeBtn" type="button">Vectorize image</button>
+        <div class="status" id="status" aria-live="polite">Ready.</div>
+      </aside>
+
+      <section class="preview-area">
+        <div class="preview-header">
+          <div>
+            <span class="eyebrow">2 · Inspect</span>
+            <h2>Image &amp; vector preview</h2>
+          </div>
+          <div class="file-meta" id="fileMeta"></div>
+        </div>
+
+        <div class="preview-grid">
+          <div class="preview-card">
+            <div class="preview-card-head"><span>Original</span><span class="mini-note">Click image to sample colors</span></div>
+            <div class="canvas-frame checker" id="sourceFrame"><canvas id="sourceCanvas"></canvas><div class="empty-overlay" id="sourceEmpty">Upload an image to begin</div></div>
+          </div>
+          <div class="preview-card">
+            <div class="preview-card-head"><span>Vector</span><span class="mini-note" id="vectorStats">Not traced yet</span></div>
+            <div class="canvas-frame checker" id="vectorFrame"><div id="vectorPreview" class="vector-preview"></div><div class="empty-overlay" id="vectorEmpty">Your vector preview will appear here</div></div>
+          </div>
+        </div>
+
+        <section class="card export-card hidden" id="exportCard">
+          <div>
+            <span class="eyebrow">3 · Export</span>
+            <h2>Download your vector</h2>
+            <p>SVG keeps editable vector paths. EPS is provided for Illustrator and print workflows.</p>
+          </div>
+          <div class="export-actions">
+            <button class="secondary" id="downloadSvgBtn" type="button">Download SVG</button>
+            <button class="primary" id="downloadEpsBtn" type="button">Download EPS</button>
+          </div>
+        </section>
+      </section>
+    </section>
+
+    <section class="card tips">
+      <div>
+        <span class="eyebrow">Best results</span>
+        <h2>Designed for simple artwork</h2>
+        <p>Use clean, flat-color artwork with a limited palette. For a silhouette, choose 2 colors and sample black + white directly from the source. Keep edge smoothing low when you need a sharper Illustrator-style result.</p>
+      </div>
+      <div class="tip-chip">Client-side</div>
+      <div class="tip-chip">No upload required</div>
+      <div class="tip-chip">SVG + EPS</div>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
