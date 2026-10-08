@@ -21,12 +21,14 @@
 
   <main class="app-shell">
     <section class="card upload-card" id="uploadCard">
-      <input id="fileInput" type="file" accept="image/png,image/jpeg,image/jpg,image/webp" hidden>
+      <input id="fileInput" type="file" accept="image/png,image/jpeg,image/jpg,image/webp" multiple hidden>
       <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Upload an image">
         <div class="upload-icon">↑</div>
-        <h2>Drop an image here</h2>
-        <p>PNG, JPG or WebP. Flat-color artwork and silhouettes work best.</p>
-        <button class="primary" id="browseBtn" type="button">Choose Image</button>
+        <h2>Drop images here</h2>
+        <p>PNG, JPG or WebP. You can select multiple images at once. Flat-color artwork and silhouettes work best.</p>
+        <button class="primary" id="browseBtn" type="button">Choose Images</button>
+        <div class="selection-note" id="selectionNote">No images selected yet</div>
+        <div class="file-queue hidden" id="fileQueue"></div>
       </div>
     </section>
 
@@ -37,7 +39,7 @@
             <span class="eyebrow">1 · Prepare</span>
             <h2>Vector settings</h2>
           </div>
-          <button class="ghost small" id="newImageBtn" type="button">New image</button>
+          <button class="ghost small" id="newImageBtn" type="button">New selection</button>
         </div>
 
         <div class="control-block">

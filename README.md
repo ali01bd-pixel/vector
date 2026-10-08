@@ -27,3 +27,7 @@ No build step is required.
 The vectorizer is optimized for flat-color graphics, silhouettes, icons and simple illustrations. It traces color-region boundaries on a reduced working raster for browser performance, then scales the resulting paths to the original image dimensions.
 
 For best silhouette results, choose **2 colors**, sample black and white from the artwork, keep **Edge smoothing** around 1–2, and use only a small amount of **Remove tiny details**.
+
+
+### Multiple image selection
+The upload control accepts multiple images at once. Selected files appear in a queue; click any filename to make it the active image for palette selection, vectorization, and SVG/EPS export.
