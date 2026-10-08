@@ -130,7 +130,12 @@
               <span class="eyebrow">Batch results</span>
               <h2>Vectorization queue</h2>
             </div>
-            <div class="file-meta" id="batchSummary">0 files</div>
+            <div class="batch-download-actions">
+              <button class="secondary small" id="downloadAllSvgBtn" type="button" disabled>Download All SVG</button>
+              <button class="primary small" id="downloadAllEpsBtn" type="button" disabled>Download All EPS</button>
+              <button class="ghost small" id="downloadAllVectorsBtn" type="button" disabled>Download All</button>
+              <div class="file-meta" id="batchSummary">0 files</div>
+            </div>
           </div>
           <div class="batch-results" id="batchResults"></div>
         </section>
@@ -161,6 +166,7 @@
     </section>
   </main>
 
+  <script src="https://cdn.jsdelivr.net/npm/imagetracerjs@1.2.6/imagetracer_v1.2.6.min.js"></script>
   <script src="script.js"></script>
 </body>
 </html>

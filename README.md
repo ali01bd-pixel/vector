@@ -15,3 +15,9 @@ All processing happens in the browser. No server upload is required.
 ## GitHub Pages
 
 Upload `index.html`, `styles.css`, and `script.js` to a repository and enable GitHub Pages from the repository's main branch/root folder.
+
+
+## Vectorization engine
+The primary tracing engine is ImageTracerJS 1.2.6 loaded from jsDelivr. It traces 8-direction contours and fits straight/quadratic spline segments for smoother editable vector paths. The site keeps the previous tracer as a fallback if the external engine is unavailable.
+
+The GitHub Pages site therefore needs normal internet access when opened so the ImageTracerJS CDN file can load.
