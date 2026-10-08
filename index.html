@@ -95,7 +95,12 @@
           <label for="fitCanvas"><strong>Fit artwork to original size</strong><span>Keep the source pixel dimensions in the output.</span></label>
         </div>
 
-        <button class="primary wide" id="vectorizeBtn" type="button">Vectorize image</button>
+        <button class="primary wide" id="vectorizeAllBtn" type="button">Vectorize All</button>
+        <button class="secondary wide secondary-action" id="vectorizeBtn" type="button">Vectorize Current Image</button>
+        <div class="batch-progress hidden" id="batchProgress">
+          <div class="batch-progress-head"><strong id="batchProgressText">0 / 0</strong><span id="batchProgressPercent">0%</span></div>
+          <div class="progress-track"><div class="progress-fill" id="batchProgressFill"></div></div>
+        </div>
         <div class="status" id="status" aria-live="polite">Ready.</div>
       </aside>
 
@@ -118,6 +123,17 @@
             <div class="canvas-frame checker" id="vectorFrame"><div id="vectorPreview" class="vector-preview"></div><div class="empty-overlay" id="vectorEmpty">Your vector preview will appear here</div></div>
           </div>
         </div>
+
+        <section class="card batch-card hidden" id="batchCard">
+          <div class="preview-header batch-header">
+            <div>
+              <span class="eyebrow">Batch results</span>
+              <h2>Vectorization queue</h2>
+            </div>
+            <div class="file-meta" id="batchSummary">0 files</div>
+          </div>
+          <div class="batch-results" id="batchResults"></div>
+        </section>
 
         <section class="card export-card hidden" id="exportCard">
           <div>

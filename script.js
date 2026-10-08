@@ -25,6 +25,14 @@
   const preserveWhite = $('preserveWhite');
   const fitCanvas = $('fitCanvas');
   const vectorizeBtn = $('vectorizeBtn');
+  const vectorizeAllBtn = $('vectorizeAllBtn');
+  const batchCard = $('batchCard');
+  const batchResults = $('batchResults');
+  const batchSummary = $('batchSummary');
+  const batchProgress = $('batchProgress');
+  const batchProgressText = $('batchProgressText');
+  const batchProgressPercent = $('batchProgressPercent');
+  const batchProgressFill = $('batchProgressFill');
   const statusEl = $('status');
   const sourceCanvas = $('sourceCanvas');
   const sourceCtx = sourceCanvas.getContext('2d', { willReadFrequently: true });
@@ -36,13 +44,9 @@
   const downloadSvgBtn = $('downloadSvgBtn');
   const downloadEpsBtn = $('downloadEpsBtn');
   const fileMeta = $('fileMeta');
-  const fileQueue = $('fileQueue');
-  const selectionNote = $('selectionNote');
 
   let sourceImage = null;
   let sourceFileName = 'vector';
-  let selectedFiles = [];
-  let activeFileIndex = -1;
   let originalWidth = 0;
   let originalHeight = 0;
   let renderImageWidth = 0;
@@ -52,6 +56,9 @@
   let currentPalette = [];
   let pickModeIndex = -1;
   let paletteMode = 'manual';
+  let batchItems = [];
+  let activeBatchIndex = -1;
+  let batchRunning = false;
 
   function clamp(n, min, max) { return Math.max(min, Math.min(max, n)); }
   function hexToRgb(hex) {
@@ -444,11 +451,12 @@
     return currentPalette.slice(0, n);
   }
 
-  async function vectorize() {
-    if (!sourceImage) { setStatus('Please choose an image first.', 'error'); return; }
+  async function vectorize(options = {}) {
+    if (!sourceImage) { setStatus('Please choose an image first.', 'error'); return null; }
+    const updateUi = options.updateUi !== false;
     vectorizeBtn.disabled = true;
-    exportCard.classList.add('hidden');
-    setStatus('Preparing image…');
+    if (updateUi) exportCard.classList.add('hidden');
+    if (updateUi) setStatus('Preparing image…');
     await nextFrame();
     try {
       const {imageData} = getVisibleSourceImageData();
@@ -456,7 +464,7 @@
       const palette = getPaletteForVector(imageData, n);
       currentPalette = palette.map(c => ({...c}));
       if (paletteMode === 'auto') renderPalette(currentPalette);
-      setStatus('Reducing colors and tracing edges…');
+      if (updateUi) setStatus('Reducing colors and tracing edges…');
       await nextFrame();
 
       const indexed = buildIndexedRaster(imageData, palette);
@@ -472,14 +480,22 @@
 
       parseSvgForPreview(currentSvg);
       vectorEmpty.classList.add('hidden');
-      exportCard.classList.remove('hidden');
+      if (updateUi) exportCard.classList.remove('hidden');
       const pathCount = paths.reduce((sum, p) => sum + p.loops.length, 0);
       vectorStats.textContent = `${paths.length} colors · ${pathCount} shapes`;
-      setStatus(`Done. ${paths.length} color layer${paths.length === 1 ? '' : 's'} traced.`, 'success');
+      if (updateUi) setStatus(`Done. ${paths.length} color layer${paths.length === 1 ? '' : 's'} traced.`, 'success');
+      return {
+        svg: currentSvg,
+        eps: currentEps,
+        palette: currentPalette.map(c => ({...c})),
+        colors: paths.length,
+        shapes: pathCount
+      };
     } catch (err) {
       console.error(err);
       currentSvg = currentEps = '';
-      setStatus(err.message || 'Vectorization failed.', 'error');
+      if (updateUi) setStatus(err.message || 'Vectorization failed.', 'error');
+      throw err;
     } finally {
       vectorizeBtn.disabled = false;
     }
@@ -487,108 +503,60 @@
 
   function nextFrame() { return new Promise(resolve => requestAnimationFrame(() => resolve())); }
 
-  function isImageFile(file) {
-    return !!file && (file.type.startsWith('image/') || /\.(png|jpe?g|webp)$/i.test(file.name || ''));
-  }
-
-  function addFiles(fileList) {
-    const incoming = Array.from(fileList || []).filter(isImageFile);
-    if (!incoming.length) {
-      setStatus('Please choose one or more PNG, JPG or WebP images.', 'error');
-      return;
-    }
-
-    const existingKeys = new Set(selectedFiles.map(f => `${f.name}|${f.size}|${f.lastModified}`));
-    let added = 0;
-    for (const file of incoming) {
-      const key = `${file.name}|${file.size}|${file.lastModified}`;
-      if (!existingKeys.has(key)) {
-        selectedFiles.push(file);
-        existingKeys.add(key);
-        added++;
-      }
-    }
-
-    if (activeFileIndex < 0 && selectedFiles.length) activeFileIndex = 0;
-    renderFileQueue();
-    if (activeFileIndex >= 0) loadFile(selectedFiles[activeFileIndex], activeFileIndex);
-    setStatus(`${selectedFiles.length} image${selectedFiles.length === 1 ? '' : 's'} selected${added ? ` · ${added} added` : ''}.`);
-  }
-
-  function renderFileQueue() {
-    fileQueue.innerHTML = '';
-    if (!selectedFiles.length) {
-      fileQueue.classList.add('hidden');
-      selectionNote.textContent = 'No images selected yet';
-      return;
-    }
-
-    fileQueue.classList.remove('hidden');
-    selectionNote.textContent = `${selectedFiles.length} image${selectedFiles.length === 1 ? '' : 's'} selected · click a file to work on it`;
-
-    selectedFiles.forEach((file, index) => {
-      const item = document.createElement('button');
-      item.type = 'button';
-      item.className = `queue-item${index === activeFileIndex ? ' active' : ''}`;
-      item.title = file.name;
-      item.innerHTML = `<span class="queue-index">${index + 1}</span><span class="queue-name">${escapeHtml(file.name)}</span><span class="queue-size">${formatBytes(file.size)}</span>`;
-      item.addEventListener('click', () => {
-        activeFileIndex = index;
-        renderFileQueue();
-        loadFile(selectedFiles[index], index);
-      });
-      fileQueue.append(item);
-    });
-  }
-
-  function escapeHtml(value) {
-    return String(value).replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','\'':'&#39;','"':'&quot;'}[ch]));
-  }
-
-  function formatBytes(bytes) {
-    if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
-    const units = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-    return `${(bytes / Math.pow(1024, i)).toFixed(i ? 1 : 0)} ${units[i]}`;
-  }
-
-  function loadFile(file, index = activeFileIndex) {
-    if (!file || !isImageFile(file)) {
+  function loadFile(file, options = {}) {
+    if (!file || !file.type.startsWith('image/')) {
       setStatus('Please choose a PNG, JPG or WebP image.', 'error');
-      return;
+      return Promise.reject(new Error('Unsupported image file.'));
     }
-    activeFileIndex = Number.isInteger(index) ? index : activeFileIndex;
-    renderFileQueue();
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      sourceImage = img;
-      sourceFileName = file.name || 'vector';
-      originalWidth = img.naturalWidth; originalHeight = img.naturalHeight;
-      const maxPreview = 820;
-      const scale = Math.min(1, maxPreview / Math.max(originalWidth, originalHeight));
-      sourceCanvas.width = Math.max(1, Math.round(originalWidth * scale));
-      sourceCanvas.height = Math.max(1, Math.round(originalHeight * scale));
-      sourceCtx.clearRect(0, 0, sourceCanvas.width, sourceCanvas.height);
-      sourceCtx.drawImage(img, 0, 0, sourceCanvas.width, sourceCanvas.height);
-      sourceCanvas.style.cursor = 'default';
-      sourceEmpty.classList.add('hidden');
-      vectorEmpty.classList.remove('hidden');
-      vectorPreview.innerHTML = '';
-      exportCard.classList.add('hidden');
-      vectorStats.textContent = 'Not traced yet';
-      fileMeta.textContent = `${file.name} · ${originalWidth} × ${originalHeight} · ${activeFileIndex + 1}/${selectedFiles.length}`;
-      workspace.classList.remove('hidden');
-      uploadCard.classList.remove('hidden');
-      currentSvg = currentEps = '';
-      updatePaletteSize();
-      autoDetectPalette();
-      setStatus(`Loaded ${file.name}. Pick exact colors or use the auto palette.`);
-      window.scrollTo({top: 0, behavior: 'smooth'});
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); setStatus('The image could not be loaded.', 'error'); };
-    img.src = url;
+    const autoPalette = options.autoPalette !== false;
+    const keepPalette = options.palette || null;
+    const scroll = options.scroll !== false;
+
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        sourceImage = img;
+        sourceFileName = file.name || 'vector';
+        originalWidth = img.naturalWidth; originalHeight = img.naturalHeight;
+        const maxPreview = 820;
+        const scale = Math.min(1, maxPreview / Math.max(originalWidth, originalHeight));
+        renderImageWidth = Math.max(1, Math.round(originalWidth * scale));
+        renderImageHeight = Math.max(1, Math.round(originalHeight * scale));
+        sourceCanvas.width = renderImageWidth;
+        sourceCanvas.height = renderImageHeight;
+        sourceCtx.clearRect(0, 0, sourceCanvas.width, sourceCanvas.height);
+        sourceCtx.drawImage(img, 0, 0, sourceCanvas.width, sourceCanvas.height);
+        sourceCanvas.style.cursor = 'default';
+        sourceEmpty.classList.add('hidden');
+        vectorEmpty.classList.remove('hidden');
+        vectorPreview.innerHTML = '';
+        exportCard.classList.add('hidden');
+        vectorStats.textContent = 'Not traced yet';
+        fileMeta.textContent = `${file.name} · ${originalWidth} × ${originalHeight}`;
+        workspace.classList.remove('hidden');
+        uploadCard.classList.add('hidden');
+        currentSvg = currentEps = '';
+        updatePaletteSize();
+
+        if (keepPalette && keepPalette.length) {
+          currentPalette = keepPalette.slice(0, Number(colorCount.value)).map(c => ({...c}));
+          renderPalette(currentPalette);
+        } else if (autoPalette || !currentPalette.length) {
+          autoDetectPalette();
+        }
+        if (scroll) window.scrollTo({top: 0, behavior: 'smooth'});
+        resolve(img);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        const err = new Error('The image could not be loaded.');
+        setStatus(err.message, 'error');
+        reject(err);
+      };
+      img.src = url;
+    });
   }
 
   function autoDetectPalette() {
@@ -607,6 +575,187 @@
     } catch (err) { setStatus('Could not detect palette.', 'error'); }
   }
 
+  function renderBatchQueue() {
+    const fileQueue = $('fileQueue');
+    if (!batchItems.length) {
+      fileQueue.classList.add('hidden');
+      fileQueue.innerHTML = '';
+      $('selectionNote').textContent = 'No images selected yet';
+      batchCard.classList.add('hidden');
+      batchSummary.textContent = '0 files';
+      updateBatchButton();
+      return;
+    }
+
+    fileQueue.classList.remove('hidden');
+    fileQueue.innerHTML = batchItems.map((item, index) => {
+      const active = index === activeBatchIndex ? ' active' : '';
+      const statusLabel = item.status === 'done' ? 'Done' : item.status === 'processing' ? 'Processing…' : item.status === 'error' ? 'Error' : 'Queued';
+      return `<button type="button" class="queue-item${active}" data-index="${index}" title="${escapeHtml(item.file.name)}">
+        <span class="queue-index">${index + 1}</span><span class="queue-name">${escapeHtml(item.file.name)}</span><span class="queue-status ${item.status}">${statusLabel}</span>
+      </button>`;
+    }).join('');
+    fileQueue.querySelectorAll('.queue-item').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const index = Number(btn.dataset.index);
+        if (batchRunning) return;
+        await activateBatchItem(index);
+      });
+    });
+    $('selectionNote').textContent = `${batchItems.length} image${batchItems.length === 1 ? '' : 's'} selected`;
+    batchSummary.textContent = `${batchItems.length} file${batchItems.length === 1 ? '' : 's'}`;
+    batchCard.classList.toggle('hidden', batchItems.length < 1);
+    renderBatchResults();
+    updateBatchButton();
+  }
+
+  function renderBatchResults() {
+    if (!batchItems.length) {
+      batchResults.innerHTML = '';
+      batchCard.classList.add('hidden');
+      return;
+    }
+    batchCard.classList.remove('hidden');
+    batchResults.innerHTML = batchItems.map((item, index) => {
+      const active = index === activeBatchIndex ? ' active' : '';
+      const statusLabel = item.status === 'done' ? 'Completed' : item.status === 'processing' ? 'Processing…' : item.status === 'error' ? 'Failed' : 'Waiting';
+      const actions = item.status === 'done' ? `<div class="batch-actions">
+        <button type="button" class="secondary mini-download" data-index="${index}" data-format="svg">SVG</button>
+        <button type="button" class="primary mini-download" data-index="${index}" data-format="eps">EPS</button>
+      </div>` : '';
+      return `<div class="batch-result${active}">
+        <div class="batch-result-main" data-index="${index}">
+          <span class="queue-index">${index + 1}</span>
+          <div class="batch-file-copy"><strong>${escapeHtml(item.file.name)}</strong><span>${statusLabel}${item.shapes ? ` · ${item.colors} colors · ${item.shapes} shapes` : ''}${item.error ? ` · ${escapeHtml(item.error)}` : ''}</span></div>
+        </div>${actions}
+      </div>`;
+    }).join('');
+    batchResults.querySelectorAll('.batch-result-main').forEach(el => {
+      el.addEventListener('click', async () => {
+        if (batchRunning) return;
+        await activateBatchItem(Number(el.dataset.index));
+      });
+    });
+    batchResults.querySelectorAll('.mini-download').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const item = batchItems[Number(btn.dataset.index)];
+        if (!item) return;
+        const format = btn.dataset.format;
+        if (format === 'svg' && item.svg) downloadBlob(item.svg, 'image/svg+xml;charset=utf-8', `${baseName(item.file.name)}_vector.svg`);
+        if (format === 'eps' && item.eps) downloadBlob(item.eps, 'application/postscript', `${baseName(item.file.name)}_vector.eps`);
+      });
+    });
+  }
+
+  function escapeHtml(value) {
+    return String(value || '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[ch]));
+  }
+
+  function updateBatchButton() {
+    const total = batchItems.length;
+    if (batchRunning) {
+      vectorizeAllBtn.textContent = 'Vectorizing…';
+      vectorizeAllBtn.disabled = true;
+      return;
+    }
+    vectorizeAllBtn.textContent = total > 1 ? `Vectorize All (${total})` : 'Vectorize All';
+    vectorizeAllBtn.disabled = total === 0;
+  }
+
+  function updateBatchProgress(completed, total) {
+    if (!total) {
+      batchProgress.classList.add('hidden');
+      return;
+    }
+    batchProgress.classList.remove('hidden');
+    const percent = Math.round((completed / total) * 100);
+    batchProgressText.textContent = `${completed} / ${total}`;
+    batchProgressPercent.textContent = `${percent}%`;
+    batchProgressFill.style.width = `${percent}%`;
+  }
+
+  async function activateBatchItem(index) {
+    if (!batchItems[index]) return;
+    activeBatchIndex = index;
+    renderBatchQueue();
+    const item = batchItems[index];
+    try {
+      await loadFile(item.file, {
+        autoPalette: paletteMode === 'auto',
+        palette: paletteMode === 'manual' ? currentPalette : (item.palette || null),
+        scroll: false
+      });
+      if (item.svg && item.eps) {
+        currentSvg = item.svg;
+        currentEps = item.eps;
+        parseSvgForPreview(currentSvg);
+        vectorEmpty.classList.add('hidden');
+        exportCard.classList.remove('hidden');
+        vectorStats.textContent = `${item.colors || ''}${item.colors ? ' colors · ' : ''}${item.shapes || 0} shapes`;
+        setStatus('Completed vector loaded.');
+      } else if (item.status === 'error') {
+        setStatus(item.error || 'This file failed during vectorization.', 'error');
+      } else {
+        setStatus('Image loaded. Ready to vectorize.');
+      }
+    } catch (err) {
+      setStatus(err.message || 'Could not load this image.', 'error');
+    }
+  }
+
+  async function processBatch() {
+    if (!batchItems.length || batchRunning) return;
+    batchRunning = true;
+    vectorizeBtn.disabled = true;
+    exportCard.classList.add('hidden');
+    updateBatchProgress(0, batchItems.length);
+    setStatus(`Starting batch of ${batchItems.length} images…`);
+    updateBatchButton();
+
+    let completed = 0;
+    for (let i = 0; i < batchItems.length; i++) {
+      const item = batchItems[i];
+      activeBatchIndex = i;
+      item.status = 'processing';
+      item.error = '';
+      renderBatchQueue();
+      setStatus(`Vectorizing ${i + 1} of ${batchItems.length}: ${item.file.name}`);
+      try {
+        await loadFile(item.file, {
+          autoPalette: paletteMode === 'auto',
+          palette: paletteMode === 'manual' ? currentPalette : null,
+          scroll: false
+        });
+        const result = await vectorize({ updateUi: false });
+        item.svg = result.svg;
+        item.eps = result.eps;
+        item.palette = result.palette;
+        item.colors = result.colors;
+        item.shapes = result.shapes;
+        item.status = 'done';
+        completed++;
+        if (i < batchItems.length - 1) await nextFrame();
+      } catch (err) {
+        item.status = 'error';
+        item.error = err.message || 'Vectorization failed.';
+      }
+      updateBatchProgress(completed, batchItems.length);
+      renderBatchQueue();
+    }
+
+    batchRunning = false;
+    vectorizeBtn.disabled = false;
+    updateBatchButton();
+    await activateBatchItem(activeBatchIndex);
+    const failed = batchItems.filter(item => item.status === 'error').length;
+    if (failed) {
+      setStatus(`Batch finished: ${completed} completed, ${failed} failed.`, failed === batchItems.length ? 'error' : '');
+    } else {
+      setStatus(`Batch finished: all ${completed} images were vectorized.`, 'success');
+    }
+  }
+
   function downloadBlob(content, mime, filename) {
     const blob = new Blob([content], {type: mime});
     const url = URL.createObjectURL(blob);
@@ -616,8 +765,9 @@
 
   function resetApp() {
     fileInput.value = '';
-    selectedFiles = [];
-    activeFileIndex = -1;
+    batchItems = [];
+    activeBatchIndex = -1;
+    batchRunning = false;
     sourceImage = null;
     currentSvg = currentEps = '';
     workspace.classList.add('hidden');
@@ -628,34 +778,54 @@
     vectorEmpty.classList.remove('hidden');
     pickModeIndex = -1;
     sourceCanvas.style.cursor = 'default';
-    renderFileQueue();
+    updateBatchProgress(0, 0);
+    renderBatchQueue();
     setStatus('Ready.');
     window.scrollTo({top: 0, behavior: 'smooth'});
   }
 
+  function handleSelectedFiles(fileList) {
+    const files = Array.from(fileList || []).filter(file => file && file.type.startsWith('image/'));
+    if (!files.length) {
+      setStatus('Please choose PNG, JPG or WebP images.', 'error');
+      return;
+    }
+    const existing = new Set(batchItems.map(item => `${item.file.name}__${item.file.size}__${item.file.lastModified}`));
+    for (const file of files) {
+      const key = `${file.name}__${file.size}__${file.lastModified}`;
+      if (existing.has(key)) continue;
+      existing.add(key);
+      batchItems.push({file, status: 'queued', svg: '', eps: '', palette: null, colors: 0, shapes: 0, error: ''});
+    }
+    if (activeBatchIndex < 0) activeBatchIndex = 0;
+    renderBatchQueue();
+    activateBatchItem(activeBatchIndex);
+  }
+
   // Events
-  browseBtn.addEventListener('click', () => { fileInput.value = ''; fileInput.click(); });
+  browseBtn.addEventListener('click', (e) => { e.stopPropagation(); fileInput.click(); });
   dropzone.addEventListener('click', (e) => {
-    if (e.target.closest('button')) return;
+    if (e.target.closest('button') || e.target.closest('.queue-item')) return;
     if (e.target === dropzone || e.target.closest('.dropzone') === dropzone) fileInput.click();
   });
   dropzone.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } });
-  fileInput.addEventListener('change', () => { addFiles(fileInput.files); });
+  fileInput.addEventListener('change', () => handleSelectedFiles(fileInput.files));
   ['dragenter', 'dragover'].forEach(ev => dropzone.addEventListener(ev, (e) => { e.preventDefault(); dropzone.classList.add('dragover'); }));
   ['dragleave', 'drop'].forEach(ev => dropzone.addEventListener(ev, (e) => { e.preventDefault(); dropzone.classList.remove('dragover'); }));
-  dropzone.addEventListener('drop', (e) => addFiles(e.dataTransfer.files));
+  dropzone.addEventListener('drop', (e) => handleSelectedFiles(e.dataTransfer.files));
   newImageBtn.addEventListener('click', resetApp);
   colorCount.addEventListener('change', () => { updatePaletteSize(); if (sourceImage) autoDetectPalette(); });
   autoPaletteBtn.addEventListener('click', autoDetectPalette);
   smoothing.addEventListener('input', () => smoothingValue.textContent = smoothing.value);
   noise.addEventListener('input', () => noiseValue.textContent = `${noise.value} px`);
-  vectorizeBtn.addEventListener('click', vectorize);
+  vectorizeBtn.addEventListener('click', () => vectorize().catch(() => {}));
+  vectorizeAllBtn.addEventListener('click', processBatch);
 
   document.querySelectorAll('.mode').forEach(btn => btn.addEventListener('click', () => {
     document.querySelectorAll('.mode').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     paletteMode = btn.dataset.mode;
-    setStatus(paletteMode === 'auto' ? 'Auto palette enabled.' : 'Selected colors will be used.');
+    setStatus(paletteMode === 'auto' ? 'Auto palette enabled. Each image will get its own detected palette.' : 'Selected colors will be used for every image in the batch.');
   }));
 
   sourceCanvas.addEventListener('click', (e) => {
@@ -686,7 +856,6 @@
   });
 
   updatePaletteSize();
-  renderFileQueue();
   smoothingValue.textContent = smoothing.value;
   noiseValue.textContent = `${noise.value} px`;
 })();
