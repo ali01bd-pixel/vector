@@ -71,18 +71,18 @@
         <div class="control-block">
           <div class="label-row">
             <label for="smoothing">Edge smoothing</label>
-            <output id="smoothingValue">2</output>
+            <output id="smoothingValue">4</output>
           </div>
-          <input id="smoothing" type="range" min="0" max="5" value="2" step="1">
+          <input id="smoothing" type="range" min="0" max="8" value="4" step="1">
           <div class="range-labels"><span>Sharper</span><span>Smoother</span></div>
         </div>
 
         <div class="control-block">
           <div class="label-row">
             <label for="noise">Remove tiny details</label>
-            <output id="noiseValue">4 px</output>
+            <output id="noiseValue">6 px</output>
           </div>
-          <input id="noise" type="range" min="0" max="30" value="4" step="1">
+          <input id="noise" type="range" min="0" max="30" value="6" step="1">
           <div class="range-labels"><span>Keep detail</span><span>Remove noise</span></div>
         </div>
 
@@ -158,7 +158,7 @@
       <div>
         <span class="eyebrow">Best results</span>
         <h2>Designed for simple artwork</h2>
-        <p>Use clean, flat-color artwork with a limited palette. For a silhouette, choose 2 colors and sample black + white directly from the source. Keep edge smoothing low when you need a sharper Illustrator-style result.</p>
+        <p>Use clean, flat-color artwork with a limited palette. For a silhouette, choose 2 colors and sample black + white directly from the source. For the cleanest silhouette edges, start around smoothing 4–5 and noise 5–8. Lower smoothing preserves more pixel-level corners; higher smoothing creates cleaner curves.</p>
       </div>
       <div class="tip-chip">Client-side</div>
       <div class="tip-chip">No upload required</div>

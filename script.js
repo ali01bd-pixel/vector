@@ -4,8 +4,8 @@
 (() => {
   'use strict';
 
-  const MAX_TRACE_DIM = 1800;
-  const SAMPLE_PIXELS = 7000;
+  const MAX_TRACE_DIM = 2200;
+  const SAMPLE_PIXELS = 12000;
   const MIN_AREA_FACTOR = 0.0000025;
 
   const $ = (id) => document.getElementById(id);
@@ -240,6 +240,59 @@
     return {labels, alpha, width, height};
   }
 
+  // Snap the raster to the chosen palette, then use a conservative majority filter
+  // to remove isolated JPEG/anti-alias speckles before spline tracing. This keeps
+  // small intentional details while making the outer contour much cleaner.
+  function cleanPaletteLabels(indexed, strength) {
+    const {labels, width, height} = indexed;
+    const passes = clamp(Math.round(Number(strength) / 3), 0, 3);
+    if (!passes) return indexed;
+    let current = labels.slice();
+    const counts = new Int16Array(32);
+    const copy = () => new Uint8Array(current);
+    for (let pass = 0; pass < passes; pass++) {
+      const next = new Uint8Array(current);
+      for (let y = 1; y < height - 1; y++) {
+        for (let x = 1; x < width - 1; x++) {
+          const center = current[y * width + x];
+          counts.fill(0);
+          let valid = 0;
+          for (let dy = -1; dy <= 1; dy++) {
+            const row = (y + dy) * width;
+            for (let dx = -1; dx <= 1; dx++) {
+              const v = current[row + x + dx];
+              if (v !== 255) { counts[v]++; valid++; }
+            }
+          }
+          if (!valid || center === 255) continue;
+          let best = center, bestCount = counts[center];
+          for (let c = 0; c < 32; c++) {
+            if (counts[c] > bestCount) { bestCount = counts[c]; best = c; }
+          }
+          // Require a strong local majority so thin lines and intentional corners
+          // are not washed out.
+          if (best !== center && bestCount >= 6) next[y * width + x] = best;
+        }
+      }
+      current = next;
+    }
+    return { ...indexed, labels: current };
+  }
+
+  function paletteRasterImageData(indexed, palette) {
+    const {width, height, labels} = indexed;
+    const data = new Uint8ClampedArray(width * height * 4);
+    for (let i = 0; i < labels.length; i++) {
+      const c = labels[i] === 255 ? {r:255,g:255,b:255,a:255} : palette[labels[i]] || {r:255,g:255,b:255,a:255};
+      const p = i * 4;
+      data[p] = Math.round(c.r);
+      data[p + 1] = Math.round(c.g);
+      data[p + 2] = Math.round(c.b);
+      data[p + 3] = 255;
+    }
+    return {width, height, data};
+  }
+
   function edgeKey(x1, y1, x2, y2) { return `${x1},${y1}|${x2},${y2}`; }
   function pointKey(x, y) { return `${x},${y}`; }
 
@@ -454,27 +507,29 @@
   }
 
   function imageTracerOptions(palette, smoothAmount, noisePx) {
-    // Lower thresholds follow the source more closely; slightly higher values
-    // give smoother curves while preserving intentional corners.
-    const s = clamp(Number(smoothAmount) || 0, 0, 5);
+    // A flatter palette + selective blur + line filtering gives a much cleaner
+    // silhouette edge than tracing JPEG/anti-aliased pixels directly. ImageTracer's
+    // docs expose these as its primary smoothing/noise controls.
+    const s = clamp(Number(smoothAmount) || 0, 0, 8);
     const n = clamp(Number(noisePx) || 0, 0, 30);
+    const blurRadius = s <= 0 ? 0 : Math.min(5, 1 + Math.round(s * 0.65));
     return {
-      ltres: 0.25 + s * 0.28,
-      qtres: 0.20 + s * 0.22,
-      pathomit: Math.round(n * 0.7),
-      rightangleenhance: true,
+      ltres: 0.65 + s * 0.45,
+      qtres: 0.55 + s * 0.38,
+      pathomit: Math.max(4, Math.round(5 + n * 1.6)),
+      rightangleenhance: s <= 1,
       colorsampling: 0,
       colorquantcycles: 1,
       mincolorratio: 0,
       layering: 0,
       strokewidth: 0,
-      linefilter: false,
+      linefilter: true,
       scale: 1,
-      roundcoords: 2,
+      roundcoords: 3,
       viewbox: true,
       desc: false,
-      blurradius: s >= 4 ? 1 : 0,
-      blurdelta: 18,
+      blurradius: blurRadius,
+      blurdelta: 28 + Math.round(s * 8),
       pal: palette.map(c => ({ r: Math.round(c.r), g: Math.round(c.g), b: Math.round(c.b), a: 255 }))
     };
   }
@@ -565,7 +620,10 @@
     if (typeof window.ImageTracer === 'undefined' || !window.ImageTracer.imagedataToTracedata) {
       return null;
     }
-    const normalized = normalizeTraceImageData(imageData);
+    // Important: quantize to the exact selected colors BEFORE tracing. This stops
+    // semi-transparent JPEG/anti-aliased edge pixels from becoming tiny stray paths.
+    const indexed = cleanPaletteLabels(buildIndexedRaster(imageData, palette), noisePx);
+    const normalized = normalizeTraceImageData(paletteRasterImageData(indexed, palette));
     const options = imageTracerOptions(palette, smoothAmount, noisePx);
     const tracedata = window.ImageTracer.imagedataToTracedata(normalized, options);
     let svg = window.ImageTracer.getsvgstring(tracedata, options);

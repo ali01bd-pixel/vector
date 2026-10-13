@@ -21,3 +21,7 @@ Upload `index.html`, `styles.css`, and `script.js` to a repository and enable Gi
 The primary tracing engine is ImageTracerJS 1.2.6 loaded from jsDelivr. It traces 8-direction contours and fits straight/quadratic spline segments for smoother editable vector paths. The site keeps the previous tracer as a fallback if the external engine is unavailable.
 
 The GitHub Pages site therefore needs normal internet access when opened so the ImageTracerJS CDN file can load.
+
+
+### Vector quality update
+The tracing pipeline first snaps pixels to the selected flat palette, applies conservative local majority cleanup, and then uses ImageTracerJS spline fitting with selective blur and line filtering. This is intended to reduce JPEG/anti-alias speckles and produce cleaner, smoother silhouettes.
